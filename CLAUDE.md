@@ -4,77 +4,80 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Market sentiment tracker for a single user (Ryan). Two separate pieces sharing a Firestore database:
+Market sentiment tracker for a single user (Ryan). Two pieces sharing a Firestore database:
 
-1. **sentiment-worker** — Python cron job on Railway, runs 3x/day (9am, 1pm, 6pm UTC weekdays). Pulls Reddit posts, scores with FinBERT, fetches SPY/RSP prices, writes to Firestore.
-2. **sentiment-dashboard** — Next.js App Router on Vercel at `ryan.ibuild4you.com`. Read-only dashboard showing fear/greed score, trend chart, and driving posts. SSR + ISR (revalidate ~30min), no auth.
+1. **worker/** — Python cron job on Railway, runs 3x/day (9am, 1pm, 6pm ET weekdays). Pulls Reddit posts via public JSON endpoints, scores with FinBERT, fetches SPY/RSP prices, writes to Firestore.
+2. **dashboard/** — Next.js App Router on Vercel at `ryan.ibuild4you.com`. Read-only dashboard showing fear/greed score, trend chart, and driving posts. SSR + ISR (revalidate ~30min), no auth.
 
 ## Architecture
 
 ```
-Reddit API (PRAW) ──┐
-                    ├── sentiment-worker (Python/Railway) ──► Firestore (sentiment-arbitrage)
-Finnhub API ────────┘                                              │
-                                                                   ▼
-                                              sentiment-dashboard (Next.js/Vercel)
-                                                       │
-                                                       ▼
-                                              ryan.ibuild4you.com
+Reddit (public JSON) ──┐
+                       ├── worker/ (Python/Railway) ──► Firestore (sentiment-arbitrage)
+Finnhub API ───────────┘                                       │
+                                                               ▼
+                                           dashboard/ (Next.js/Vercel)
+                                                    │
+                                                    ▼
+                                           ryan.ibuild4you.com
 ```
 
 ## Firestore Collections
 
-Dedicated Firebase project (not shared with iBuild4you):
+Firebase project `sentiment-arbitrage` (dedicated, not shared):
 
 - `sentiment_scores` — `{ timestamp, score, post_count, avg_positive, avg_negative, avg_neutral }`
-- `sentiment_posts` — `{ timestamp, subreddit, title, selftext_preview, url, reddit_score, sentiment_label, sentiment_positive, sentiment_negative, sentiment_neutral }`
+- `sentiment_posts` — `{ timestamp, run_id, subreddit, title, selftext_preview, url, reddit_score, sentiment_label, sentiment_positive, sentiment_negative, sentiment_neutral }`
 - `price_snapshots` — `{ timestamp, ticker, close_price }`
 
 ## Worker (Python)
 
-- Python 3.11+, deployed on Railway with cron (`0 9,13,18 * * 1-5`)
-- `praw` for Reddit (r/investing, r/stocks, r/wallstreetbets — ~100 hottest posts)
-- `transformers` + `torch` with `ProsusAI/finbert` for sentiment (load once, batch classify)
-- `finnhub-python` for SPY/RSP daily close prices
+- Python 3.11, Dockerized, deployed on Railway with cron (`0 14,18,23 * * 1-5` = 9am/1pm/6pm ET)
+- Reddit data via public JSON endpoints (`reddit.com/r/{sub}/hot.json`) — no API key needed
+- `transformers` + `torch` (CPU) with `ProsusAI/finbert` for sentiment
+- `finnhub-python` for SPY/RSP prices
 - `firebase-admin` for Firestore writes
 - Fear/greed score: `(avg_positive - avg_negative)` scaled to 0-100
-- Runs must be idempotent — use timestamp-based doc IDs or check before writing
-- Service account JSON stored as env var string, parsed at runtime
+- Idempotent runs via timestamp-based doc IDs
 
-Required env vars:
+Required env vars (set in Railway):
 ```
-REDDIT_CLIENT_ID
-REDDIT_CLIENT_SECRET
-REDDIT_USER_AGENT
 FINNHUB_API_KEY
-GOOGLE_APPLICATION_CREDENTIALS_JSON   # JSON string, not file path
-FIRESTORE_PROJECT_ID
+GOOGLE_APPLICATION_CREDENTIALS_JSON   # JSON string or file path
+FIRESTORE_PROJECT_ID                  # sentiment-arbitrage
 ```
 
 ## Dashboard (Next.js)
 
-- Next.js App Router, Tailwind CSS, Recharts
-- Server components reading Firestore directly (Option A from brief), ISR ~30min
-- Firebase Admin SDK for Firestore reads (same pattern as iBuild4you)
-- Dark background, fear/greed gauge as hero element, mobile-friendly
-- Dual Y-axis trend chart: sentiment (dominant) + prices (muted), 7-day window
-- Context line generated from data (compare current score to yesterday)
-- Top 5 bullish + top 5 bearish posts with Reddit links
-- Domain: `ryan.ibuild4you.com` (CNAME to `cname.vercel-dns.com`)
+- Next.js 16 App Router, Tailwind CSS, Recharts
+- Server components reading Firestore directly, ISR 30min
+- Dark theme, fear/greed gauge hero, mobile-friendly
+- Dual Y-axis trend chart: sentiment (dominant) + prices (muted)
+- Top 5 bullish + bearish driving posts with Reddit links
 
-Required env vars:
+Required env vars (set in Vercel):
 ```
 GOOGLE_APPLICATION_CREDENTIALS_JSON
 FIRESTORE_PROJECT_ID
 ```
 
+## Commands
+
+Worker (local dev):
+```
+cd worker && source venv/bin/activate && set -a && source .env && set +a && python main.py
+```
+
+Dashboard (local dev):
+```
+cd dashboard && npm run dev
+```
+
 ## Next Steps
 
-1. Get Reddit API credentials (register script app at reddit.com/prefs/apps, add to worker/.env)
-2. Get Finnhub API key (register at finnhub.io, add to worker/.env)
-3. Test worker locally (`cd worker && python -m venv venv && source venv/bin/activate && pip install -r requirements.txt && python main.py`)
-4. Deploy worker to Railway, run a few times to seed Firestore
-5. Build and deploy Next.js dashboard to Vercel
+1. Monitor worker cron runs on Railway — verify data accumulates over trading days
+2. Gather Ryan's feedback on the dashboard and iterate
+3. Reddit API access request is pending — can upgrade from public JSON if approved
 
 ## Scope Boundaries
 
