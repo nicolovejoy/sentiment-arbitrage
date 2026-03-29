@@ -1,0 +1,5 @@
+transformers
+finnhub-python
+firebase-admin
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
