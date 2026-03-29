@@ -4,7 +4,7 @@ import { PostList } from "@/components/post-list";
 import { getContextLine } from "@/lib/sentiment";
 import { getScores, getLatestPosts, getPrices } from "@/lib/data";
 
-export const revalidate = 1800; // ISR: 30 minutes
+export const revalidate = 1800; // ISR: 30 min
 
 export default async function Home() {
   const [scores, { bearish, bullish }, priceMap] = await Promise.all([
