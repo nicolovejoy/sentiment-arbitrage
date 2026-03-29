@@ -75,9 +75,10 @@ cd dashboard && npm run dev
 
 ## Next Steps
 
-1. Monitor worker cron runs on Railway — verify data accumulates over trading days
-2. Gather Ryan's feedback on the dashboard and iterate
-3. Reddit API access request is pending — can upgrade from public JSON if approved
+1. Monitor worker cron runs on Railway starting Monday — verify data accumulates and scores vary across runs
+2. Rename Vercel project from "dashboard" to something better (Settings → General → Project Name)
+3. Gather Ryan's feedback on the dashboard and iterate
+4. Reddit API access request is pending (submitted 2026-03-28) — can upgrade from public JSON if approved
 
 ## Scope Boundaries
 
