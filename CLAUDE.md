@@ -71,12 +71,17 @@ cd dashboard && npm run dev
 
 ## Deploying Worker to Raspberry Pi
 
-SSH to the Pi, then run the setup script:
+If repo is already cloned on the Pi, pull and run:
 ```
-bash <(curl -sL https://raw.githubusercontent.com/nicolovejoy/sentiment-arbitrage/main/worker/setup-pi.sh)
+cd ~/sentiment-arbitrage && git pull && bash worker/setup-pi.sh
 ```
 
-That clones this repo, installs Python deps + FinBERT model, creates an env template, and installs systemd units. Then:
+For fresh setup, clone first:
+```
+git clone https://github.com/nicolovejoy/sentiment-arbitrage.git ~/sentiment-arbitrage && bash ~/sentiment-arbitrage/worker/setup-pi.sh
+```
+
+The setup script installs Python deps + FinBERT model (~400MB), creates an env template, and installs systemd units. Then:
 
 1. Fill in secrets: `nano /home/nico/sentiment-arbitrage/worker/.env`
 2. Test run: `sudo systemctl start sentiment-worker && journalctl -u sentiment-worker -f`
