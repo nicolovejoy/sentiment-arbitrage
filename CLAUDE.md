@@ -33,7 +33,7 @@ Firebase project `sentiment-arbitrage` (dedicated, not shared):
 ## Worker (Python)
 
 - Python 3.11, runs on Raspberry Pi via systemd timer (9am/1pm/6pm ET weekdays)
-- Previously on Railway — moved due to Reddit 403-blocking datacenter IPs (2026-03-31)
+- Previously on Railway (deleted 2026-03-31) — Reddit 403-blocks datacenter IPs
 - Reddit data via public JSON endpoints (`reddit.com/r/{sub}/hot.json`) — no API key needed, residential IP required
 - `transformers` + `torch` (CPU) with `ProsusAI/finbert` for sentiment
 - `finnhub-python` for SPY/RSP prices
@@ -41,7 +41,7 @@ Firebase project `sentiment-arbitrage` (dedicated, not shared):
 - Fear/greed score: `(avg_positive - avg_negative)` scaled to 0-100
 - Idempotent runs via timestamp-based doc IDs
 
-Required env vars (set on Raspberry Pi, managed via SPAN repo):
+Required env vars (set on Raspberry Pi):
 ```
 FINNHUB_API_KEY
 GOOGLE_APPLICATION_CREDENTIALS_JSON   # JSON string or file path
@@ -92,11 +92,9 @@ Logs: `journalctl -u sentiment-worker --since today`
 
 ## Next Steps
 
-1. Confirm Pi worker runs successfully — check Firestore for fresh data after next scheduled run
-2. Disable Railway cron once Pi is confirmed working (project: dazzling-adventure, service: sentiment-arbitrage)
-3. Rename Vercel project from "dashboard" to something better (Settings → General → Project Name)
-4. Gather Ryan's feedback on the dashboard and iterate
-5. Reddit API access request is pending (submitted 2026-03-28) — can upgrade from public JSON if approved
+1. Verify Pi worker data accumulates over the next few days — check dashboard shows fresh scores after each run
+2. Gather Ryan's feedback on the dashboard and iterate
+3. Reddit API access request is pending (submitted 2026-03-28) — can upgrade from public JSON if approved
 
 ## Scope Boundaries
 
