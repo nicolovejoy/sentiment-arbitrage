@@ -3,7 +3,7 @@
 # Run as: bash setup-pi.sh
 set -euo pipefail
 
-REPO_DIR="/home/pi/sentiment-arbitrage"
+REPO_DIR="$HOME/sentiment-arbitrage"
 WORKER_DIR="$REPO_DIR/worker"
 
 echo "=== Step 1: Clone repo ==="

@@ -64,15 +64,26 @@ FIRESTORE_PROJECT_ID
 
 ## Commands
 
-Worker (local dev):
-```
-cd worker && source venv/bin/activate && set -a && source .env && set +a && python main.py
-```
-
 Dashboard (local dev):
 ```
 cd dashboard && npm run dev
 ```
+
+## Deploying Worker to Raspberry Pi
+
+SSH to the Pi, then run the setup script:
+```
+bash <(curl -sL https://raw.githubusercontent.com/nicolovejoy/sentiment-arbitrage/main/worker/setup-pi.sh)
+```
+
+That clones this repo, installs Python deps + FinBERT model, creates an env template, and installs systemd units. Then:
+
+1. Fill in secrets: `nano /home/nico/sentiment-arbitrage/worker/.env`
+2. Test run: `sudo systemctl start sentiment-worker && journalctl -u sentiment-worker -f`
+3. Start timer: `sudo systemctl start sentiment-worker.timer`
+4. Verify: `systemctl list-timers sentiment-worker.timer`
+
+Logs: `journalctl -u sentiment-worker --since today`
 
 ## Next Steps
 
