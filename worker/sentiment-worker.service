@@ -1,0 +1,18 @@
+[Unit]
+Description=Sentiment Arbitrage Worker — fetch Reddit posts, score with FinBERT, write to Firestore
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/sentiment-arbitrage/worker
+ExecStart=/home/pi/sentiment-arbitrage/worker/venv/bin/python main.py
+EnvironmentFile=/home/pi/sentiment-arbitrage/worker/.env
+TimeoutStartSec=300
+# Restart on failure with backoff (systemd oneshot retry via timer, but this catches crashes)
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

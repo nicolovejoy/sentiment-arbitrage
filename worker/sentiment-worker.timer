@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Sentiment Worker 3x/day on weekdays (9am, 1pm, 6pm ET)
+
+[Timer]
+# EDT (UTC-4): 9am=13:00Z, 1pm=17:00Z, 6pm=22:00Z
+# When EST (Nov-Mar), these fire 1hr early ET. Acceptable for this use case.
+# To fix: swap to 14:00, 18:00, 23:00 in November, back in March.
+OnCalendar=Mon..Fri 13:00 UTC
+OnCalendar=Mon..Fri 17:00 UTC
+OnCalendar=Mon..Fri 22:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
