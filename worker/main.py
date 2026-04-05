@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.request import Request, urlopen
 
 import finnhub
@@ -174,6 +174,71 @@ def write_to_firestore(db, run_id, timestamp, aggregate, posts, prices):
     log.info("Wrote %d price_snapshots", len(prices))
 
 
+def compute_correlation(db, today):
+    """Compute yesterday's sentiment vs today's price change and store it."""
+    today_str = today.strftime("%Y-%m-%d")
+    yesterday = today - timedelta(days=1)
+    yesterday_str = yesterday.strftime("%Y-%m-%d")
+
+    # Skip if already computed for today
+    existing = db.collection("correlations").document(today_str).get()
+    if existing.exists:
+        log.info("Correlation for %s already exists, skipping", today_str)
+        return
+
+    # Get yesterday's sentiment scores (all runs that day)
+    scores_snap = db.collection("sentiment_scores") \
+        .where("timestamp", ">=", yesterday) \
+        .where("timestamp", "<", today) \
+        .get()
+
+    if not scores_snap:
+        log.info("No sentiment scores for %s, skipping correlation", yesterday_str)
+        return
+
+    avg_sentiment = sum(doc.to_dict()["score"] for doc in scores_snap) / len(scores_snap)
+
+    # Get yesterday's and today's prices
+    # Price docs are keyed like "2026-04-04T13-00_SPY"
+    yesterday_prefix = yesterday.strftime("%Y-%m-%d")
+    today_prefix = today.strftime("%Y-%m-%d")
+
+    def get_latest_price(date_prefix, ticker):
+        """Get the last price snapshot for a ticker on a given date."""
+        docs = db.collection("price_snapshots") \
+            .where("ticker", "==", ticker) \
+            .where("timestamp", ">=", datetime.strptime(date_prefix, "%Y-%m-%d").replace(tzinfo=timezone.utc)) \
+            .where("timestamp", "<", datetime.strptime(date_prefix, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)) \
+            .order_by("timestamp", direction="DESCENDING") \
+            .limit(1) \
+            .get()
+        if docs:
+            return docs[0].to_dict()["close_price"]
+        return None
+
+    spy_yesterday = get_latest_price(yesterday_prefix, "SPY")
+    spy_today = get_latest_price(today_prefix, "SPY")
+    rsp_yesterday = get_latest_price(yesterday_prefix, "RSP")
+    rsp_today = get_latest_price(today_prefix, "RSP")
+
+    if not all([spy_yesterday, spy_today, rsp_yesterday, rsp_today]):
+        log.info("Missing price data for correlation (yesterday=%s, today=%s), skipping",
+                 yesterday_str, today_str)
+        return
+
+    spy_pct = round((spy_today - spy_yesterday) / spy_yesterday * 100, 4)
+    rsp_pct = round((rsp_today - rsp_yesterday) / rsp_yesterday * 100, 4)
+
+    db.collection("correlations").document(today_str).set({
+        "date": today_str,
+        "sentiment_score": round(avg_sentiment, 2),
+        "spy_next_day_pct": spy_pct,
+        "rsp_next_day_pct": rsp_pct,
+    })
+    log.info("Wrote correlation for %s: sentiment=%.2f, SPY=%.4f%%, RSP=%.4f%%",
+             today_str, avg_sentiment, spy_pct, rsp_pct)
+
+
 def main():
     log.info("Starting sentiment worker run")
     now = datetime.now(timezone.utc)
@@ -212,6 +277,12 @@ def main():
         except Exception:
             log.exception("Firestore write failed on retry, giving up")
             return
+
+    # Compute correlation (yesterday's sentiment vs today's price change)
+    try:
+        compute_correlation(db, now.replace(hour=0, minute=0, second=0, microsecond=0))
+    except Exception:
+        log.exception("Correlation computation failed (non-fatal)")
 
     log.info("Run %s complete", run_id)
 

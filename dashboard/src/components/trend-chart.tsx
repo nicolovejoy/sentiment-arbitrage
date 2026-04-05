@@ -18,11 +18,25 @@ type DataPoint = {
   RSP: number;
 };
 
+function normalize(data: DataPoint[]): DataPoint[] {
+  // Find first data point with non-zero prices as the base
+  const base = data.find((d) => d.SPY > 0 && d.RSP > 0);
+  if (!base) return data;
+
+  return data.map((d) => ({
+    ...d,
+    SPY: d.SPY > 0 ? (d.SPY / base.SPY) * 100 : 0,
+    RSP: d.RSP > 0 ? (d.RSP / base.RSP) * 100 : 0,
+  }));
+}
+
 export function TrendChart({ data }: { data: DataPoint[] }) {
+  const normalized = normalize(data);
+
   return (
     <div className="w-full h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+        <LineChart data={normalized} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis
             dataKey="date"
@@ -44,7 +58,7 @@ export function TrendChart({ data }: { data: DataPoint[] }) {
             stroke="#71717a"
             fontSize={12}
             tickLine={false}
-            label={{ value: "Price ($)", angle: 90, position: "insideRight", fill: "#71717a", fontSize: 12 }}
+            label={{ value: "Indexed (100)", angle: 90, position: "insideRight", fill: "#71717a", fontSize: 12 }}
           />
           <Tooltip
             contentStyle={{
@@ -54,6 +68,10 @@ export function TrendChart({ data }: { data: DataPoint[] }) {
               fontSize: 13,
             }}
             labelStyle={{ color: "#a1a1aa" }}
+            formatter={(value) => {
+              const n = typeof value === "number" ? value : Number(value);
+              return n.toFixed(1);
+            }}
           />
           <Legend />
           <Line

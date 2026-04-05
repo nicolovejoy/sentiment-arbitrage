@@ -29,6 +29,7 @@ Firebase project `sentiment-arbitrage` (dedicated, not shared):
 - `sentiment_scores` — `{ timestamp, score, post_count, avg_positive, avg_negative, avg_neutral }`
 - `sentiment_posts` — `{ timestamp, run_id, subreddit, title, selftext_preview, url, reddit_score, sentiment_label, sentiment_positive, sentiment_negative, sentiment_neutral }`
 - `price_snapshots` — `{ timestamp, ticker, close_price }`
+- `correlations` — `{ date, sentiment_score, spy_next_day_pct, rsp_next_day_pct }` (background data collection, not displayed yet)
 
 ## Worker (Python)
 
@@ -53,7 +54,7 @@ FIRESTORE_PROJECT_ID                  # sentiment-arbitrage
 - Next.js 16 App Router, Tailwind CSS, Recharts
 - Server components reading Firestore directly, ISR 30min
 - Dark theme, fear/greed gauge hero, mobile-friendly
-- Dual Y-axis trend chart: sentiment (dominant) + prices (muted)
+- Dual Y-axis trend chart: sentiment (left, dominant) + SPY/RSP normalized to 100 (right, for relative comparison)
 - Top 5 bullish + bearish driving posts with Reddit links
 
 Required env vars (set in Vercel):
