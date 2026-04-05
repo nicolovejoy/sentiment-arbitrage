@@ -93,9 +93,10 @@ Logs: `journalctl -u sentiment-worker --since today`
 
 ## Next Steps
 
-1. Verify Pi worker data accumulates over the next few days — check dashboard shows fresh scores after each run
-2. Gather Ryan's feedback on the dashboard and iterate
-3. Reddit API access request is pending (submitted 2026-03-28) — can upgrade from public JSON if approved
+1. Verify correlation data accumulates — first doc expected Tuesday (needs Monday's sentiment + Tuesday's prices)
+2. Watch for Firestore composite index error on `price_snapshots` (ticker + timestamp) in Pi logs after Monday's run — create index via link in error
+3. Gather more feedback from Ryan on dashboard and iterate
+4. Reddit API access request pending (submitted 2026-03-28) — upgrade from public JSON if approved
 
 ## Scope Boundaries
 
