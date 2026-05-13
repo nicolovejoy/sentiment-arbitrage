@@ -93,9 +93,9 @@ Logs: `journalctl -u sentiment-worker --since today`
 
 ## Next Steps
 
-1. Verify correlation data accumulates — first doc expected Tuesday (needs Monday's sentiment + Tuesday's prices)
-2. Watch for Firestore composite index error on `price_snapshots` (ticker + timestamp) in Pi logs after Monday's run — create index via link in error
-3. Gather more feedback from Ryan on dashboard and iterate
+1. Once back on Pi network: verify first `correlations` doc landed today (Tuesday 2026-05-12) — `journalctl -u sentiment-worker --since today | grep -i correlat` and check Firestore. Also watch for the composite-index error on `price_snapshots` (ticker + timestamp); create the index via the link in the error if it appears.
+2. Gather Ryan's feedback on the new chart axes + correlation slider scaffolding, iterate visuals
+3. Once enough correlation history exists, wire real `dailyFlags` / `weeklyFlags` data into `TrendChart` and define what the sensitivity slider actually controls (threshold? lookback window?)
 4. Reddit API access request pending (submitted 2026-03-28) — upgrade from public JSON if approved
 
 ## Scope Boundaries
