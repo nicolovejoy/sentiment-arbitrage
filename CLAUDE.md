@@ -35,7 +35,7 @@ Firebase project `sentiment-arbitrage` (dedicated, not shared):
 
 - Python 3.11, runs on Raspberry Pi via systemd timer (9am/1pm/6pm ET weekdays)
 - Previously on Railway (deleted 2026-03-31) — Reddit 403-blocks datacenter IPs
-- Reddit data via public JSON endpoints (`reddit.com/r/{sub}/hot.json`) — no API key needed, residential IP required
+- Reddit data via public JSON endpoints (`reddit.com/r/{sub}/hot.json`) — no API key needed, residential IP required (official API request was denied 2026-05-13)
 - `transformers` + `torch` (CPU) with `ProsusAI/finbert` for sentiment
 - `finnhub-python` for SPY/RSP prices
 - `firebase-admin` for Firestore writes
@@ -96,7 +96,7 @@ Logs: `journalctl -u sentiment-worker --since today`
 1. Once back on Pi network: verify first `correlations` doc landed today (Tuesday 2026-05-12) — `journalctl -u sentiment-worker --since today | grep -i correlat` and check Firestore. Also watch for the composite-index error on `price_snapshots` (ticker + timestamp); create the index via the link in the error if it appears.
 2. Gather Ryan's feedback on the new chart axes + correlation slider scaffolding, iterate visuals
 3. Once enough correlation history exists, wire real `dailyFlags` / `weeklyFlags` data into `TrendChart` and define what the sensitivity slider actually controls (threshold? lookback window?)
-4. Reddit API access request pending (submitted 2026-03-28) — upgrade from public JSON if approved
+4. Reddit official API request was denied (2026-05-13) — public JSON from Pi residential IP is the locked-in data path; do not propose moving the worker to cloud/datacenter hosts
 
 ## Scope Boundaries
 
