@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from urllib.request import Request, urlopen
@@ -13,10 +14,42 @@ from transformers import BertForSequenceClassification, BertTokenizer, pipeline
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-SUBREDDITS = ["investing", "stocks", "wallstreetbets"]
-POSTS_PER_SUB = 34  # ~100 total
+# WSB is the primary emotional signal; investing/stocks supplement
+SUBREDDIT_LIMITS = {
+    "wallstreetbets": 60,
+    "stocks": 20,
+    "investing": 20,
+}
 TICKERS = ["SPY", "RSP"]
 USER_AGENT = "sentiment-tracker:v1 (research project)"
+
+STOCKTWITS_SYMBOLS = ["SPY"]
+STOCKTWITS_BASE = "https://api.stocktwits.com/api/2/streams/symbol"
+
+# Heuristic markers of informational (vs emotional) posts. Conservative — when
+# in doubt, keep. Filtered silently; Ryan never sees what was dropped.
+INFORMATIONAL_PATTERNS = [
+    re.compile(r"\bearnings\s*(?:report|recap|results|preview|call)\b", re.I),
+    re.compile(r"\bq[1-4]\s*(?:fy)?\s*20\d\d\b", re.I),
+    re.compile(r"^\s*(?:daily|weekly|monthly)\s+(?:discussion|thread|recap)", re.I),
+    re.compile(r"\b(?:price\s+target|pt)\s+(?:raised|cut|to)\b", re.I),
+    re.compile(r"\banalyst[s]?\s+(?:say|rate|target|cut|raise|upgrade|downgrade)", re.I),
+    re.compile(r"\b(?:upgrade|downgrade)d?\s+(?:to|from)\b", re.I),
+    re.compile(r"^\s*(?:reuters|bloomberg|cnbc|wsj|barron'?s|marketwatch|seeking\s*alpha)\s*[:|\-]", re.I),
+    re.compile(r"\bmegathread\b", re.I),
+    re.compile(r"\bguidance\s+(?:raised|cut|revised|reaffirmed)\b", re.I),
+    re.compile(r"\b(?:beats|misses|tops)\s+(?:eps|revenue|estimates)\b", re.I),
+    re.compile(r"\bfed\s+(?:minutes|statement|decision)\b", re.I),
+    re.compile(r"\bcpi\s+(?:report|data|print|came in)\b", re.I),
+]
+
+
+def is_informational(title: str, selftext: str = "") -> bool:
+    """Return True if the post looks like news/analysis rather than emotional content."""
+    for pat in INFORMATIONAL_PATTERNS:
+        if pat.search(title):
+            return True
+    return False
 
 
 def init_firestore():
@@ -31,12 +64,13 @@ def init_firestore():
     return firestore.client()
 
 
-def fetch_posts():
+def fetch_reddit_posts():
     """Fetch hot posts from Reddit using public JSON endpoints (no API key needed)."""
     posts = []
-    for sub_name in SUBREDDITS:
+    raw_count = 0
+    for sub_name, limit in SUBREDDIT_LIMITS.items():
         try:
-            url = f"https://www.reddit.com/r/{sub_name}/hot.json?limit={POSTS_PER_SUB}"
+            url = f"https://www.reddit.com/r/{sub_name}/hot.json?limit={limit}"
             req = Request(url, headers={"User-Agent": USER_AGENT})
             resp = urlopen(req, timeout=15)
             data = json.loads(resp.read())
@@ -45,25 +79,79 @@ def fetch_posts():
                 p = child["data"]
                 if p.get("stickied"):
                     continue
-                text = p["title"]
-                selftext_preview = ""
+                raw_count += 1
+                title = p["title"]
+                selftext_preview = p.get("selftext", "")[:500] if p.get("selftext") else ""
+                if is_informational(title, selftext_preview):
+                    continue
+                text = title
                 if p.get("selftext"):
-                    selftext_preview = p["selftext"][:500]
-                    text = f"{p['title']}. {p['selftext'][:300]}"
+                    text = f"{title}. {p['selftext'][:300]}"
                 posts.append({
+                    "source": "reddit",
                     "subreddit": sub_name,
-                    "title": p["title"],
+                    "title": title,
                     "selftext_preview": selftext_preview,
                     "url": f"https://reddit.com{p['permalink']}",
                     "reddit_score": p.get("score", 0),
                     "text_for_analysis": text,
+                    "presupplied_label": None,
                 })
-            # Be polite — wait between subreddit requests
             time.sleep(2)
         except Exception:
             log.exception("Failed to fetch from r/%s", sub_name)
-    log.info("Fetched %d posts from %d subreddits", len(posts), len(SUBREDDITS))
+    log.info("Reddit: kept %d / %d posts after filter", len(posts), raw_count)
     return posts
+
+
+def fetch_stocktwits():
+    """Fetch recent messages from StockTwits. Posts tagged Bullish/Bearish bypass FinBERT."""
+    token = os.environ.get("STOCKTWITS_TOKEN", "").strip()
+    posts = []
+    raw_count = 0
+    for symbol in STOCKTWITS_SYMBOLS:
+        url = f"{STOCKTWITS_BASE}/{symbol}.json"
+        if token:
+            url += f"?access_token={token}"
+        try:
+            req = Request(url, headers={"User-Agent": USER_AGENT})
+            resp = urlopen(req, timeout=15)
+            data = json.loads(resp.read())
+            for msg in data.get("messages", []):
+                raw_count += 1
+                body = (msg.get("body") or "").strip()
+                if not body:
+                    continue
+                if is_informational(body):
+                    continue
+                sentiment = ((msg.get("entities") or {}).get("sentiment") or {}).get("basic")
+                presupplied = None
+                if sentiment == "Bullish":
+                    presupplied = "positive"
+                elif sentiment == "Bearish":
+                    presupplied = "negative"
+                user_name = ((msg.get("user") or {}).get("username")) or "stocktwits"
+                msg_id = msg.get("id")
+                permalink = f"https://stocktwits.com/{user_name}/message/{msg_id}" if msg_id else "https://stocktwits.com"
+                posts.append({
+                    "source": "stocktwits",
+                    "subreddit": "stocktwits",  # dashboard compat — replaced by source soon
+                    "title": body[:280],
+                    "selftext_preview": body[:500],
+                    "url": permalink,
+                    "reddit_score": (msg.get("likes") or {}).get("total", 0) if isinstance(msg.get("likes"), dict) else 0,
+                    "text_for_analysis": body[:512],
+                    "presupplied_label": presupplied,
+                })
+            time.sleep(1)
+        except Exception:
+            log.exception("StockTwits fetch failed for %s", symbol)
+    log.info("StockTwits: kept %d / %d posts after filter", len(posts), raw_count)
+    return posts
+
+
+def fetch_posts():
+    return fetch_reddit_posts() + fetch_stocktwits()
 
 
 def load_finbert():
@@ -73,19 +161,26 @@ def load_finbert():
 
 
 def analyze_sentiment(nlp, posts):
-    texts = [p["text_for_analysis"] for p in posts]
-    # FinBERT has a 512 token limit; truncate long texts
-    texts = [t[:512] for t in texts]
+    # Posts with presupplied labels (StockTwits Bullish/Bearish) skip FinBERT
+    for post in posts:
+        label = post.get("presupplied_label")
+        if label:
+            post["sentiment_label"] = label
+            post["sentiment_positive"] = 1.0 if label == "positive" else 0.0
+            post["sentiment_negative"] = 1.0 if label == "negative" else 0.0
+            post["sentiment_neutral"] = 0.0
 
-    results = nlp(texts, batch_size=16, truncation=True)
-
-    for post, result in zip(posts, results):
-        label = result["label"]  # positive, negative, or neutral
-        score = result["score"]
-        post["sentiment_label"] = label
-        post["sentiment_positive"] = score if label == "positive" else 0.0
-        post["sentiment_negative"] = score if label == "negative" else 0.0
-        post["sentiment_neutral"] = score if label == "neutral" else 0.0
+    to_score = [p for p in posts if not p.get("presupplied_label")]
+    if to_score:
+        texts = [p["text_for_analysis"][:512] for p in to_score]
+        results = nlp(texts, batch_size=16, truncation=True)
+        for post, result in zip(to_score, results):
+            label = result["label"]
+            score = result["score"]
+            post["sentiment_label"] = label
+            post["sentiment_positive"] = score if label == "positive" else 0.0
+            post["sentiment_negative"] = score if label == "negative" else 0.0
+            post["sentiment_neutral"] = score if label == "neutral" else 0.0
 
     return posts
 
@@ -151,6 +246,7 @@ def write_to_firestore(db, run_id, timestamp, aggregate, posts, prices):
         batch.set(doc_ref, {
             "timestamp": timestamp,
             "run_id": run_id,
+            "source": post.get("source", "reddit"),
             "subreddit": post["subreddit"],
             "title": post["title"],
             "selftext_preview": post["selftext_preview"],

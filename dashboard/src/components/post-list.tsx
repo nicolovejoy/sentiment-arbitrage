@@ -1,6 +1,7 @@
 type Post = {
   title: string;
   subreddit: string;
+  source?: "reddit" | "stocktwits";
   sentiment_positive?: number;
   sentiment_negative?: number;
   url: string;
@@ -48,7 +49,9 @@ export function PostList({
                 </span>
               </div>
               <span className="text-xs text-zinc-500 mt-1 inline-block">
-                r/{post.subreddit}
+                {post.source === "stocktwits" || post.subreddit === "stocktwits"
+                  ? "StockTwits"
+                  : `r/${post.subreddit}`}
               </span>
             </a>
           );

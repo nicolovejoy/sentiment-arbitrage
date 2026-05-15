@@ -12,6 +12,7 @@ export type SentimentScore = {
 export type SentimentPost = {
   title: string;
   subreddit: string;
+  source?: "reddit" | "stocktwits";
   url: string;
   sentiment_label: string;
   sentiment_positive: number;
